@@ -1,4 +1,4 @@
-module github.com/edgexfoundry/app-functions-sdk-go/v2
+module github.com/btrace-baader/app-functions-sdk-go/v2
 
 go 1.18
 
