@@ -22,7 +22,7 @@ variables:
     ${{ else }}:
       value: '-wip'
   - name: majorMinorVersion
-    value: 0.1
+    value: 2.3.1
   - name: patchVersion
     value: $[counter(variables['majorMinorVersion'], 0)]
 

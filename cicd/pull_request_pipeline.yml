@@ -81,14 +81,14 @@ steps:
   displayName: Get go modules
   inputs:
     command: 'get'
-    arguments: '-d'
+    arguments: '-d ./...'
     workingDirectory: '$(System.DefaultWorkingDirectory)'
     
 - task: Go@0
   displayName: Build Golang
   inputs:
     command: 'build'
-    arguments: '-v'
+    arguments: '-v ./...'
     workingDirectory: '$(System.DefaultWorkingDirectory)'
 
 #-------------------------------
