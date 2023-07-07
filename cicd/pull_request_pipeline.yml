@@ -3,12 +3,6 @@ name: $(majorMinorVersion).$(patchVersion)$(extension)
 trigger:
   - main
   - develop
-  - feature/*
-  
-pr:
-  - main
-  - develop
-  - feature/*
   
 variables:
   - template: vars/variables.yml
