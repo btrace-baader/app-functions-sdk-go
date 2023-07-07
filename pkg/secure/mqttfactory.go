@@ -20,6 +20,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
+
 	"github.com/eclipse/paho.mqtt.golang"
 	"github.com/edgexfoundry/go-mod-bootstrap/v2/bootstrap/messaging"
 	"github.com/edgexfoundry/go-mod-core-contracts/v2/clients/logger"
@@ -81,9 +82,8 @@ func (factory MqttFactory) configureMQTTClientForAuth(secretData *messaging.Secr
 		// nolint: gosec
 		InsecureSkipVerify: factory.skipCertVerify,
 		MinVersion:         tls.VersionTLS12,
-		ClientAuth:         tls.NoClientCert,
 	}
-	// Username may be required when cert authentication
+	//Username may be required when cert authentication
 	if secretData.Username != "" {
 		factory.opts.SetUsername(secretData.Username)
 	}
