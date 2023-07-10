@@ -1,0 +1,143 @@
+name: $(majorMinorVersion).$(patchVersion)$(extension)
+
+trigger:
+  - main
+  - develop
+  
+variables:
+  - template: vars/variables.yml
+  - group: SonarcloudVariables
+  - name: GOBIN
+    value:  '$(GOPATH)/bin' # Go binaries path
+  - name: GOPATH
+    value : '$(System.DefaultWorkingDirectory)/../gopath' # Go workspace path
+  
+pool:
+  vmImage: $(osimage)
+  
+steps:
+- checkout: self
+  displayName: 'Git checkout'
+  persistCredentials: true
+  fetchDepth: 0
+  
+#-------------------------------
+# Get tools ready
+#-------------------------------
+  
+# this increases the tracebility of a container in dev mode.
+# Using the shorthash you can directly reference the sources of the work in progress
+- powershell: |
+    $shortHash = "$(Build.SourceVersion)".Substring(0, 7)
+    Write-Host "##vso[task.setvariable variable=shortHash]$shortHash"
+  displayName: Set Short Hash
+
+# override the build number with the short hash
+- powershell: Write-Host "##vso[build.updatebuildnumber]$(majorMinorVersion).$(patchVersion)$(extension)-$(shortHash)"
+  displayName: Update Build Number when using work in progress build  
+  
+- script: |
+    sudo apt-get update
+    sudo apt-get install -qq -y libtool pkg-config build-essential autoconf automake
+    sudo apt-get install -qq -y libzmq3-dev
+    ##vso[task.setvariable variable=PKG_CONFIG_PATH]/usr/local/Cellar/zeromq/4.0.4/lib/pkgconfig/
+  displayName: Install libzmq
+
+#-------------------------------
+# Build app service
+#-------------------------------
+# this is the currently not working connection to the baader nuget
+
+- task: SonarCloudPrepare@1
+  displayName: Prepare Sonarcloud
+  inputs:
+    SonarCloud: '$(sonar_cloud_endpoint_name)'
+    organization: '$(sonar_cloud_organization)'
+    scannerMode: 'CLI'
+    configMode: 'manual'
+    cliProjectKey : '$(sonarcloudKeyAppServiceGo)'
+    extraProperties: | 
+      sonar.go.tests.reportPaths=$(Build.SourcesDirectory)/report.json
+      sonar.go.coverage.reportPaths=$(Build.SourcesDirectory)/coverage.out
+      sonar.projectVersion=$(majorMinorTag)      
+      
+- task: GoTool@0
+  displayName: 'Install and select Go version $(GOVERSION)'
+  inputs:
+    version: '1.20.5'
+    
+- task: Go@0
+  displayName: Get go modules
+  inputs:
+    command: 'get'
+    arguments: '-d ./...'
+    workingDirectory: '$(System.DefaultWorkingDirectory)'
+    
+- task: Go@0
+  displayName: Build Golang
+  inputs:
+    command: 'build'
+    arguments: '-v ./...'
+    workingDirectory: '$(System.DefaultWorkingDirectory)'
+
+#-------------------------------
+# Run tests
+#-------------------------------
+
+- script: |
+    echo '##vso[task.prependpath]$(GOBIN)'
+    echo '##vso[task.prependpath]$(GOROOT)/bin'
+    go get github.com/jstemmer/go-junit-report
+    go install github.com/jstemmer/go-junit-report
+    go get github.com/axw/gocov/gocov
+    go install github.com/axw/gocov/gocov
+    go get github.com/AlekSi/gocov-xml
+    go install github.com/AlekSi/gocov-xml
+    go get github.com/t-yuki/gocover-cobertura
+    go install github.com/t-yuki/gocover-cobertura
+    go test -v -coverprofile=coverage.txt ./... 2>&1 | $(GOBIN)/go-junit-report > report.xml
+    go test ./... -coverprofile=coverage.out -covermode=count -json > report.json
+    $(GOBIN)/gocov convert coverage.txt > coverage.json
+    $(GOBIN)/gocov-xml < coverage.json > coverage.xml
+  workingDirectory: '$(System.DefaultWorkingDirectory)'
+  displayName: 'Run tests and convert unittest results'
+  continueOnError: true
+
+- task: PublishTestResults@2
+  displayName: 'Publish test results'
+  continueOnError: true
+  inputs:
+    testRunner: JUnit
+    testResultsFiles: $(System.DefaultWorkingDirectory)/**/report.xml
+
+- task: PublishCodeCoverageResults@1
+  displayName: 'Publish code coverage results'
+  continueOnError: true
+  inputs:
+    codeCoverageTool: Cobertura 
+    summaryFileLocation: $(System.DefaultWorkingDirectory)/**/coverage.xml
+    reportDirectory: $(System.DefaultWorkingDirectory)/**/coverage
+    
+#-------------------------------
+# Check code styles 
+#-------------------------------
+
+- task: SonarCloudAnalyze@1
+  continueOnError: true
+  displayName: 'Run SonarCloud analysis'
+    
+#-------------------------------
+# Create executable packages 
+#-------------------------------
+
+- task: SonarCloudPublish@1
+  displayName: Publish Sonarcloud
+  inputs:
+    pollingTimeoutSec: '300'
+
+- task: CopyFiles@2
+  inputs:
+    TargetFolder: '$(Build.ArtifactStagingDirectory)'
+- task: PublishBuildArtifacts@1
+  inputs:
+     artifactName: drop
